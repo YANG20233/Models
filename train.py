@@ -22,17 +22,18 @@ def evaluate_model(loader, model):
     
     with torch.no_grad():  # Disable gradient calculation
         for batch in loader:
-            batch = batch.to(device)
+            batch = batch.to(device)  # Use global `device`
             out = model(batch.x, batch.edge_index, batch.batch)  # Forward pass
             probs = torch.sigmoid(out).cpu().numpy()  # Apply sigmoid for binary classification
             
             all_probs.extend(probs)
             all_labels.extend(batch.y.cpu().numpy())
 
-    # Sweep through thresholds and find the one that maximizes balanced accuracy
+    # Sweep through thresholds to find the one that maximizes balanced accuracy
     thresholds = np.linspace(0.1, 0.9, 100)
     best_balanced_acc = 0.0
     best_preds = None
+    optimal_threshold = 0.5  # Default threshold, updated if a better one is found
     
     for threshold in thresholds:
         preds = (np.array(all_probs) >= threshold).astype(int)
@@ -40,13 +41,22 @@ def evaluate_model(loader, model):
         if balanced_acc > best_balanced_acc:
             best_balanced_acc = balanced_acc
             best_preds = preds
-
+            optimal_threshold = threshold  # Update optimal threshold
+    
     # Calculate binary metrics using the best predictions
     roc_auc = roc_auc_score(all_labels, all_probs)  # ROC-AUC for binary classification
     f1 = f1_score(all_labels, best_preds)  # F1 score for binary classification
     balanced_acc = balanced_accuracy_score(all_labels, best_preds)  # Balanced accuracy for binary classification
 
-    return roc_auc, f1, balanced_acc
+    # Return metrics along with the optimal threshold
+    return {
+        "roc_auc": roc_auc,
+        "f1": f1,
+        "balanced_acc": balanced_acc,
+        "optimal_threshold": optimal_threshold,
+        "all_labels": all_labels,
+        "all_probs": all_probs
+    }
 
 def train():
    model.train()
@@ -73,14 +83,21 @@ def train():
 
 for epoch in range(50):
     train_loss = train()
-    roc_auc, f1, balanced_acc = evaluate_model(val_loader, model)
+    # Get metrics from evaluate_model
+    metrics = evaluate_model(val_loader, model)
+    roc_auc = metrics["roc_auc"]
+    f1 = metrics["f1"]
+    balanced_acc = metrics["balanced_acc"]
+    optimal_threshold = metrics["optimal_threshold"]
+    
+    # Early stopping based on ROC-AUC
     early_stopping(roc_auc)
-    print(f'Epoch {epoch + 1}, Loss: {train_loss:.4f}, ROC-AUC: {roc_auc:.4f}, F1-Score: {f1:.4f}, Balanced Accuracy: {balanced_acc:.4f}')
+    print(f'Epoch {epoch + 1}, Loss: {train_loss:.4f}, ROC-AUC: {roc_auc:.4f}, F1-Score: {f1:.4f}, Balanced Accuracy: {balanced_acc:.4f}, Optimal Threshold: {optimal_threshold:.2f}')
     
     if early_stopping.early_stop:
-       print("Early stopping triggered")
-       break
-
+        print("Early stopping triggered")
+        break
+        
 # Define cross-validation function
 def cross_validate(model_class, dataset, batch_size, k_folds=5):
     # KFold splits the dataset into k folds
