@@ -37,38 +37,18 @@ def evaluate_model(loader, model):
             all_probs.extend(probs)
             all_labels.extend(batch.y.cpu().numpy())
     
-    # Directly apply a threshold of 0.5
-    preds = (np.array(all_probs) >= 0.5).astype(int)
+    # Use a fixed decision boundary of 0.7
+    threshold = 0.7
+    preds = (np.array(all_probs) >= threshold).astype(int)
     
-    # Calculate binary metrics
+    # Calculate binary metrics using the fixed threshold
     roc_auc = roc_auc_score(all_labels, all_probs)  # ROC-AUC for binary classification
     f1 = f1_score(all_labels, preds)  # F1 score for binary classification
     balanced_acc = balanced_accuracy_score(all_labels, preds)  # Balanced accuracy for binary classification
 
     # Calculate confusion matrix for sensitivity and specificity
     tn, fp, fn, tp = confusion_matrix(all_labels, preds).ravel()
-    sensitivity = tp / (tp + fn)  # Sensitivity (recall)
-    specificity = tn / (tn + fp)  # Specificity
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0  # Sensitivity (recall)
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0  # Specificity
 
-    return roc_auc, f1, balanced_acc, sensitivity, specificity, all_labels, all_probs
-    preds = (np.array(all_probs) >= 0.5).astype(int)
-    
-    # Calculate binary metrics
-    roc_auc = roc_auc_score(all_labels, all_probs)  # ROC-AUC for binary classification
-    f1 = f1_score(all_labels, preds)  # F1 score for binary classification
-    balanced_acc = balanced_accuracy_score(all_labels, preds)  # Balanced accuracy for binary classification
-
-    # Calculate confusion matrix for sensitivity and specificity
-    tn, fp, fn, tp = confusion_matrix(all_labels, preds).ravel()
-    sensitivity = tp / (tp + fn)  # Sensitivity (recall)
-    specificity = tn / (tn + fp)  # Specificity
-
-    return roc_auc, f1, balanced_acc, sensitivity, specificity, all_labels, all_probs
-
-test_loader = DataLoader(adjusted_test_graphs, batch_size=32, shuffle=False)
-
-# Unpack all the values returned by the evaluate_model function
-roc_auc, f1, balanced_acc, sensitivity, specificity, true_labels, predicted_probs = evaluate_model(test_loader, model)
-
-# Print the relevant metrics
-print(f"Test ROC-AUC: {roc_auc:.4f}, Test F1 Score: {f1:.4f}, Test Balanced Accuracy: {balanced_acc:.4f}")
+    return roc_auc, f1, balanced_acc, sensitivity, specificity, all_labels, all_probs, threshold
